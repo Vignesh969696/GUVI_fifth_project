@@ -35,7 +35,7 @@ model.eval()
 # -------------------------------
 # Streamlit UI
 # -------------------------------
-st.title("🧠 Depression Prediction App")
+st.title("Depression Prediction App")
 st.write("Enter your details to predict the likelihood of depression.")
 
 with st.form("input_form"):
@@ -102,6 +102,7 @@ if submit:
     # -------------------------------
     # Show results
     # -------------------------------
-    st.subheader("🩺 Prediction Result")
+    st.subheader("Prediction Result")
     st.write(f"**Prediction:** {'Depression' if prediction == 1 else 'No Depression'}")
     st.write(f"**Probability:** {prob:.2f}")
+
