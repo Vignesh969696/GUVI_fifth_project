@@ -1,17 +1,16 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import torch
 import joblib
-import numpy as np
 from model import DepressionMLP
 
 # -------------------------------
 # Load preprocessing artifacts
 # -------------------------------
-scaler = joblib.load("saved_models/scaler.joblib")
-ohe = joblib.load("saved_models/onehot_encoder.joblib")
-X_sample, _, _, _ = joblib.load("saved_models/data_split.joblib")
-model_path = "saved_models/model.pth"
+scaler = joblib.load("scaler.joblib")
+ohe = joblib.load("onehot_encoder.joblib")
+model_path = "model.pth"
 
 # -------------------------------
 # Device setup
@@ -19,9 +18,16 @@ model_path = "saved_models/model.pth"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # -------------------------------
+# Compute input_dim for the model
+# -------------------------------
+num_features = 5  # Age, Work Pressure, Job Satisfaction, Work/Study Hours, Financial Stress
+# Using a dummy row to get number of categorical features from one-hot encoder
+cat_features = ohe.transform([["Unknown"]*6]).shape[1]  # 6 categorical columns
+input_dim = num_features + cat_features
+
+# -------------------------------
 # Load trained model
 # -------------------------------
-input_dim = X_sample.shape[1]
 model = DepressionMLP(input_dim).to(device)
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
@@ -59,35 +65,35 @@ if submit:
         'Have you ever had suicidal thoughts ?': [1 if Suicidal_Thoughts == "Yes" else 0],
         'Family History of Mental Illness': [1 if Family_History == "Yes" else 0],
         'Work/Study Hours': [Work_Study_Hours],
-        'Financial Stress': [Financial_Stress]
+        'Financial Stress': [Financial_Stress],
+        # Fill missing columns expected by one-hot encoder
+        'City': ["Unknown"],
+        'Degree': ["Unknown"]
     }
 
     df_input = pd.DataFrame(input_dict)
 
     # -------------------------------
-    # Ensure all columns match preprocessing pipeline
+    # One-hot encode categorical features
     # -------------------------------
     multi_cat_cols = ['City', 'Working Professional or Student', 'Profession', 'Sleep Duration', 'Dietary Habits', 'Degree']
+    X_cat = ohe.transform(df_input[multi_cat_cols])
 
-    # Add missing columns with a default value
-    for col in multi_cat_cols:
-        if col not in df_input.columns:
-            df_input[col] = "Unknown"
-
-    # One-hot encode categorical features
-    cat_data = ohe.transform(df_input[multi_cat_cols])
-    X_cat = np.array(cat_data)
-
-    # Scale numeric features (5 numeric columns as in preprocessing)
-    # Placeholder 0 for missing columns 'Work Pressure', 'Job Satisfaction'
-    numeric_data = np.array([[Age, 0, 0, Work_Study_Hours, Financial_Stress]])
+    # -------------------------------
+    # Scale numeric features (5 numeric columns)
+    # -------------------------------
+    numeric_data = np.array([[Age, 0, 0, Work_Study_Hours, Financial_Stress]])  # 0 for Work Pressure & Job Satisfaction
     numeric_scaled = scaler.transform(numeric_data)
 
+    # -------------------------------
     # Combine numeric + categorical
+    # -------------------------------
     X_final = np.hstack([numeric_scaled, X_cat])
     X_tensor = torch.tensor(X_final, dtype=torch.float32).to(device)
 
+    # -------------------------------
     # Predict
+    # -------------------------------
     with torch.no_grad():
         logits = model(X_tensor)
         prob = torch.sigmoid(logits).item()
@@ -99,5 +105,3 @@ if submit:
     st.subheader("🩺 Prediction Result")
     st.write(f"**Prediction:** {'Depression' if prediction == 1 else 'No Depression'}")
     st.write(f"**Probability:** {prob:.2f}")
-
-
